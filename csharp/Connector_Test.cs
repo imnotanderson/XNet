@@ -27,13 +27,25 @@ namespace X.XNet
             th.Start();
             for (;;)
             {
-                c.Recv();
+                var data = new byte[4];
+                c.ReceiveFull(data);
+                if (System.BitConverter.IsLittleEndian == false)
+                {
+                    var tmData = data.Reverse().GetEnumerator();
+                    for (int i = 0; i < data.Length; i++)
+                    {
+                        tmData.MoveNext();
+                        data[i] = tmData.Current;
+                    }
+                }
+                var len = (int) System.BitConverter.ToUInt32(data, 0);
+                data = new byte[len];
+                c.ReceiveFull(data);
+                var str = System.Text.UTF8Encoding.UTF8.GetString(data);
+                Log("recv:"+str);
                 //if(data!=null||data.Length!=0)
-               // Log(data.Length);
+                // Log(data.Length);
             }
-            
-     
-            
         }
 
         void Test()

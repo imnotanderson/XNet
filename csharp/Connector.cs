@@ -52,6 +52,7 @@ namespace X.XNet
         ManualResetEvent sendOverEvent = new ManualResetEvent(false);
         ManualResetEvent recvOverEvent = new ManualResetEvent(false);
         ManualResetEvent sendEvent = new ManualResetEvent(false);
+        ManualResetEvent recvEvent = new ManualResetEvent(false);
 
         private Action<CONN_EVENT,Exception> onEvent;
         
@@ -62,24 +63,50 @@ namespace X.XNet
             this.port = port;
         }
 
-        public void Send(byte[] data)
+        public int Send(byte[] data)
         {
             lock (sendLock)
             {
                 rawSendDataList.AddRange(data);
             }
             sendEvent.Set();
+            return data.Length;
         }
 
-        public byte[] Recv()
+        public int Receive(byte[] data)
         {
-            byte[] data = null;
+            recvEvent.WaitOne();
             lock (recvLock)
             {
-                data = rawRecvDataList.ToArray();
-                rawRecvDataList.Clear();
+                var n = Math.Min(data.Length, rawRecvDataList.Count);
+                for (int i = 0; i < n; i++)
+                {
+                    data[i] = rawRecvDataList[i];
+                }
+                rawRecvDataList = rawRecvDataList.GetRange(n, rawRecvDataList.Count - n);
+                recvEvent.Reset();
+                return n;
             }
-            return data;
+        }
+
+        public int ReceiveFull(byte[] data)
+        {
+            for (;;)
+            {
+                recvEvent.WaitOne();
+                lock (recvLock)
+                {
+                    if(data.Length>rawRecvDataList.Count)continue;
+                    var n = data.Length;
+                    for (int i = 0; i < n; i++)
+                    {
+                        data[i] = rawRecvDataList[i];
+                    }
+                    rawRecvDataList = rawRecvDataList.GetRange(n, rawRecvDataList.Count - n);
+                    recvEvent.Reset();
+                    return n;
+                }
+            }
         }
 
         public void Connect()
@@ -214,6 +241,7 @@ namespace X.XNet
             lock (recvLock)
             {
                 rawRecvDataList.AddRange(data);
+                recvEvent.Set();
             }
         }
 
