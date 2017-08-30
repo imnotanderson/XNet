@@ -2,8 +2,10 @@ package XNet
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"testing"
+	"time"
 )
 
 func TestXNet(t *testing.T) {
@@ -15,6 +17,7 @@ func TestXNet(t *testing.T) {
 	for {
 		c := lsn.Accept()
 		println("accept...")
+		go sendTest(c)
 		go func() {
 			for {
 				//data := make([]byte, 1024)
@@ -37,4 +40,20 @@ func TestXNet(t *testing.T) {
 		}()
 	}
 
+}
+
+var sendCount int = 0
+
+func sendTest(c *Client) {
+	for {
+		str := fmt.Sprintf("send from svr %v", sendCount)
+		sendCount++
+		strData := []byte(str)
+		len := len(strData)
+		lenData := make([]byte, 4)
+		binary.LittleEndian.PutUint32(lenData, uint32(len))
+		c.Write(lenData)
+		c.Write(strData)
+		time.After(time.Second)
+	}
 }

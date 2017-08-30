@@ -170,6 +170,11 @@ func (c *Client) Read(b []byte) (n int, err error) {
 	return n, nil
 }
 
+func (c *Client) Write(b []byte) (n int, err error) {
+	c.writeToSendData(b)
+	return len(b), nil
+}
+
 func (c *Client) getRecvLen() int {
 	c.recvLock.RLock()
 	defer c.recvLock.RUnlock()
