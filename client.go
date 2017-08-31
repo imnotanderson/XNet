@@ -38,6 +38,7 @@ type Client struct {
 	sendLock     sync.RWMutex
 	sendData     []byte
 	recvSign     chan struct{}
+	sendSign     chan struct{}
 }
 
 func newClient(connID uint64, conn net.Conn) *Client {
@@ -49,6 +50,7 @@ func newClient(connID uint64, conn net.Conn) *Client {
 		conn:         conn,
 		tokenEncoded: encodeToken(connID, token),
 		recvSign:     make(chan struct{}),
+		sendSign:     make(chan struct{}),
 	}
 	return c
 }
@@ -92,18 +94,35 @@ func (c *Client) writeToRecvData(data []byte) {
 }
 
 func (c *Client) writeToSendData(data []byte) {
+	if len(data) == 0 {
+		return
+	}
 	c.sendLock.Lock()
-	defer c.sendLock.Unlock()
+	defer func() {
+		c.sendLock.Unlock()
+		c.sendSign <- struct{}{}
+	}()
 	c.sendData = append(c.sendData, data...)
+	if len(c.sendData) > SEND_BUFFER_MAX {
+		c.Close()
+	}
 }
 
 func (c *Client) raw_send(conn net.Conn) {
 	payload := make([]byte, 1024)
 	for {
+		select {
+		case <-c.sendSign:
+		case <-c.die:
+			return
+		}
 		c.sendLock.Lock()
 		n := copy(payload, c.sendData)
 		c.sendData = c.sendData[:0]
 		c.sendLock.Unlock()
+		if n == 0 {
+			continue
+		}
 		sendLen, err := conn.Write(payload[:n])
 		if err != nil {
 			c.sendData = append(payload[sendLen:n], c.sendData...)
@@ -131,8 +150,14 @@ func (c *Client) onReconnect(conn net.Conn) error {
 	return nil
 }
 
-func (c *Client) Close() {
-	close(c.die)
+func (c *Client) Close() error {
+	select {
+	case <-c.die:
+		return ERR_CONN_DIE
+	default:
+		close(c.die)
+		return nil
+	}
 }
 
 func (c *Client) checkToken(token []byte) bool {
@@ -171,8 +196,13 @@ func (c *Client) Read(b []byte) (n int, err error) {
 }
 
 func (c *Client) Write(b []byte) (n int, err error) {
-	c.writeToSendData(b)
-	return len(b), nil
+	select {
+	case <-c.die:
+		return 0, ERR_CONN_DIE
+	default:
+		c.writeToSendData(b)
+		return len(b), nil
+	}
 }
 
 func (c *Client) getRecvLen() int {

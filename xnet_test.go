@@ -52,8 +52,16 @@ func sendTest(c *Client) {
 		len := len(strData)
 		lenData := make([]byte, 4)
 		binary.LittleEndian.PutUint32(lenData, uint32(len))
-		c.Write(lenData)
-		c.Write(strData)
+		_, err := c.Write(lenData)
+		checkErr(err)
+		_, err = c.Write(strData)
+		checkErr(err)
 		time.After(time.Second)
+	}
+}
+
+func checkErr(err error) {
+	if err != nil {
+		panic(err)
 	}
 }

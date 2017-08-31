@@ -8,6 +8,10 @@ import (
 	"sync/atomic"
 )
 
+var (
+	SEND_BUFFER_MAX int = 1024
+)
+
 const (
 	CONN_ID_LEN int = 8
 	TOKEN_LEN       = 4
