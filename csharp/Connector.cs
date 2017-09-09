@@ -45,8 +45,8 @@ namespace X.XNet
         private int port;
         
         private Socket s;
-        List<byte> rawRecvDataList = new List<byte>();
-        List<byte> rawSendDataList = new List<byte>();
+        Queue<byte> rawRecvDataList = new Queue<byte>();
+        Queue<byte> rawSendDataList = new Queue<byte>();
         object recvLock = new object();
         object sendLock = new object();
         ManualResetEvent sendOverEvent = new ManualResetEvent(false);
@@ -67,7 +67,10 @@ namespace X.XNet
         {
             lock (sendLock)
             {
-                rawSendDataList.AddRange(data);
+                for (int i = 0; i < data.Length; i++)
+                {
+                    rawSendDataList.Enqueue(data[i]);
+                }
             }
             sendEvent.Set();
             return data.Length;
@@ -79,11 +82,11 @@ namespace X.XNet
             lock (recvLock)
             {
                 var n = Math.Min(data.Length, rawRecvDataList.Count);
+                
                 for (int i = 0; i < n; i++)
                 {
-                    data[i] = rawRecvDataList[i];
+                    data[i] = rawRecvDataList.Dequeue();
                 }
-                rawRecvDataList = rawRecvDataList.GetRange(n, rawRecvDataList.Count - n);
                 recvEvent.Reset();
                 return n;
             }
@@ -100,9 +103,8 @@ namespace X.XNet
                     var n = data.Length;
                     for (int i = 0; i < n; i++)
                     {
-                        data[i] = rawRecvDataList[i];
+                        data[i] = rawRecvDataList.Dequeue();
                     }
-                    rawRecvDataList = rawRecvDataList.GetRange(n, rawRecvDataList.Count - n);
                     recvEvent.Reset();
                     return n;
                 }
@@ -111,7 +113,6 @@ namespace X.XNet
 
         public void Connect()
         {
-            
             if (s != null && s.Connected)
             {
                 s.Close();
@@ -179,6 +180,10 @@ namespace X.XNet
                         OnEvent(CONN_EVENT.KICKOUT, null);
                         return false;
                     }
+                    //recv new token
+                    var token = new byte[TOKEN_LEN];
+                    s.Receive(token);
+                    EncodeAuthData(connId, token);
                 }
                 catch (Exception e)
                 {
@@ -200,9 +205,9 @@ namespace X.XNet
             this.authData = connId;
         }
         
+        byte[] payload = new byte[1024*1024];
         void RawRecv()
         {
-            var payload = new byte[1024];
             var n = 0;
             for (;;)
             {
@@ -210,6 +215,7 @@ namespace X.XNet
                 {
                     n = s.Receive(payload);
                     WriteToRecv(n, payload);
+                    n = 0;
                 }
                 catch (Exception e)
                 {
@@ -240,7 +246,10 @@ namespace X.XNet
             }
             lock (recvLock)
             {
-                rawRecvDataList.AddRange(data);
+                for (int i = 0; i < data.Length; i++)
+                {
+                    rawRecvDataList.Enqueue(data[i]);
+                }
                 recvEvent.Set();
             }
         }
@@ -255,14 +264,22 @@ namespace X.XNet
                 bool needRead = false;
                 lock (sendLock)
                 {
-                    needRead = rawSendDataList.Count > 0;
+                    needRead = unsendData!=null || rawSendDataList.Count > 0;
                 }
                 if (needRead)
                 {
                     lock (sendLock)
                     {
-                        data = rawSendDataList.ToArray();
-                        rawSendDataList.Clear();
+                        if (unsendData != null)
+                        {
+                            data = unsendData;
+                            unsendData = null;
+                        }
+                        else
+                        {
+                            data = rawSendDataList.ToArray();
+                            rawSendDataList.Clear();
+                        }
                     }
                 }
                 else
@@ -279,14 +296,13 @@ namespace X.XNet
                 {
                     if (data != null)
                     {
-                        var unsendData = new byte[data.Length - sendLen];
-                        for (int i = 0; i < unsendData.Length; i++)
-                        {
-                            unsendData[i] = data[sendLen + i];
-                        }
                         lock (sendLock)
                         {
-                            rawSendDataList.InsertRange(0, unsendData);
+                            unsendData = new byte[data.Length - sendLen];
+                            for (int i = 0; i < unsendData.Length; i++)
+                            {
+                                unsendData[i] = data[sendLen + i];
+                            }
                         }
                     }
                     sendOverEvent.Set();
@@ -294,12 +310,28 @@ namespace X.XNet
                 }
             }
         }
-        
+
+        private byte[] unsendData = null;
         
         public void TestKill()
         {
             s.Close();
         }
 
+        public static string bytes2str(byte[] data)
+        {
+            string s = "[";
+            foreach (var b in data)
+            {
+                s += b + ",";
+            }
+            s += "]";
+            return s;
+        }
+
+        void Log(object obj)
+        {
+            System.Console.WriteLine("[CONN]"+obj.ToString());
+        }
     }
 }

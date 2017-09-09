@@ -42,7 +42,8 @@ namespace X.XNet
                 data = new byte[len];
                 c.ReceiveFull(data);
                 var str = System.Text.UTF8Encoding.UTF8.GetString(data);
-                Log("recv:"+str);
+                var parseInt = int.Parse(str);
+                Log("recv int:"+parseInt);
                 //if(data!=null||data.Length!=0)
                 // Log(data.Length);
             }
@@ -71,7 +72,8 @@ namespace X.XNet
             if (obj == CONN_EVENT.TRANSMISSION_ERR)
             {
                 Log("reconn");
-                c.Connect();
+                Thread th = new Thread(()=>c.Connect());
+                th.Start();
             }
         }
         
