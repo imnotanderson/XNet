@@ -46,7 +46,7 @@ var sendCount int = 0
 
 func sendTest(c *Client) {
 	for {
-		str := fmt.Sprintf("send from svr %v", sendCount)
+		str := fmt.Sprintf("%v", sendCount)
 		sendCount++
 		strData := []byte(str)
 		len := len(strData)
@@ -54,9 +54,10 @@ func sendTest(c *Client) {
 		binary.LittleEndian.PutUint32(lenData, uint32(len))
 		_, err := c.Write(lenData)
 		checkErr(err)
+		println("send ", str)
 		_, err = c.Write(strData)
 		checkErr(err)
-		time.After(time.Second)
+		<-time.After(time.Millisecond * 500)
 	}
 }
 

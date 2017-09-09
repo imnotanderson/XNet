@@ -37,6 +37,7 @@ type Client struct {
 	recvData     []byte
 	sendLock     sync.RWMutex
 	sendData     []byte
+	unsendData   []byte
 	recvSign     chan struct{}
 	sendSign     chan struct{}
 }
@@ -116,16 +117,26 @@ func (c *Client) raw_send(conn net.Conn) {
 		case <-c.die:
 			return
 		}
-		c.sendLock.Lock()
-		n := copy(payload, c.sendData)
-		c.sendData = c.sendData[:0]
-		c.sendLock.Unlock()
+		n := 0
+		if c.unsendData != nil {
+			if len(c.unsendData) == 0 {
+				c.unsendData = nil
+				continue
+			}
+			n = copy(payload, c.unsendData)
+			c.unsendData = nil
+		} else {
+			c.sendLock.Lock()
+			n = copy(payload, c.sendData)
+			c.sendData = c.sendData[:0]
+			c.sendLock.Unlock()
+		}
 		if n == 0 {
 			continue
 		}
 		sendLen, err := conn.Write(payload[:n])
 		if err != nil {
-			c.sendData = append(payload[sendLen:n], c.sendData...)
+			c.unsendData = payload[sendLen:n]
 			return
 		}
 	}
