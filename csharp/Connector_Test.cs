@@ -38,12 +38,28 @@ namespace X.XNet
                         data[i] = tmData.Current;
                     }
                 }
-                var len = (int) System.BitConverter.ToUInt32(data, 0);
-                data = new byte[len];
-                c.ReceiveFull(data);
-                var str = System.Text.UTF8Encoding.UTF8.GetString(data);
-                var parseInt = int.Parse(str);
-                Log("recv int:"+parseInt);
+                try
+                {
+                    var len = (int) System.BitConverter.ToUInt32(data, 0);
+                    if (len > 10)
+                    {
+                        Log("len err:"+len);
+                        new Thread(() =>
+                        {
+                            Thread.Sleep(2000);
+                            Environment.Exit(0);
+                        }).Start();
+                    }
+                    data = new byte[len];
+                    c.ReceiveFull(data);
+                    var str = System.Text.UTF8Encoding.UTF8.GetString(data);
+                    var parseInt = int.Parse(str);
+                    Log("recv int:"+parseInt);
+                }
+                catch (Exception e)
+                {
+                   Environment.Exit(0);
+                }
                 //if(data!=null||data.Length!=0)
                 // Log(data.Length);
             }

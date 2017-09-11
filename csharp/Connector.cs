@@ -78,11 +78,13 @@ namespace X.XNet
 
         public int Receive(byte[] data)
         {
-            recvEvent.WaitOne();
+            if (GetRecvLen() == 0)
+            {
+                recvEvent.WaitOne();
+            }
             lock (recvLock)
             {
                 var n = Math.Min(data.Length, rawRecvDataList.Count);
-                
                 for (int i = 0; i < n; i++)
                 {
                     data[i] = rawRecvDataList.Dequeue();
@@ -92,14 +94,27 @@ namespace X.XNet
             }
         }
 
+        int GetRecvLen()
+        {
+            int i = 0;
+            lock (recvLock)
+            {
+                i = rawRecvDataList.Count;
+            }
+            return i;
+        }
+        
         public int ReceiveFull(byte[] data)
         {
             for (;;)
             {
-                recvEvent.WaitOne();
+                if (data.Length > GetRecvLen())
+                {
+                    recvEvent.WaitOne();
+                    continue;
+                }
                 lock (recvLock)
                 {
-                    if(data.Length>rawRecvDataList.Count)continue;
                     var n = data.Length;
                     for (int i = 0; i < n; i++)
                     {
