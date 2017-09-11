@@ -40,6 +40,8 @@ type Client struct {
 	unsendData   []byte
 	recvSign     chan struct{}
 	sendSign     chan struct{}
+	recvOverSign chan struct{}
+	sendOverSign chan struct{}
 }
 
 func newClient(connID uint64, conn net.Conn) *Client {
@@ -52,6 +54,8 @@ func newClient(connID uint64, conn net.Conn) *Client {
 		tokenEncoded: encodeToken(connID, token),
 		recvSign:     make(chan struct{}),
 		sendSign:     make(chan struct{}),
+		recvOverSign: make(chan struct{}),
+		sendOverSign: make(chan struct{}),
 	}
 	return c
 }
@@ -77,6 +81,7 @@ func (c *Client) start() {
 }
 
 func (c *Client) raw_recv(conn net.Conn) {
+	defer close(c.recvOverSign)
 	payload := make([]byte, 1024)
 	for {
 		n, err := conn.Read(payload)
@@ -110,6 +115,7 @@ func (c *Client) writeToSendData(data []byte) {
 }
 
 func (c *Client) raw_send(conn net.Conn) {
+	defer close(c.sendOverSign)
 	payload := make([]byte, 1024)
 	for {
 		select {
@@ -154,6 +160,10 @@ func (c *Client) onReconnect(conn net.Conn) error {
 	}
 	c.token = token
 	c.conn.Close()
+	<-c.sendOverSign
+	<-c.recvOverSign
+	c.sendOverSign = make(chan struct{})
+	c.recvOverSign = make(chan struct{})
 	c.conn = conn
 	c.tokenEncoded = encodeToken(c.connId, c.token)
 	go c.raw_send(c.conn)
